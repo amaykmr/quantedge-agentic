@@ -3,6 +3,14 @@ import { AGENTS } from '../config/agents.js'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1'
 
+// Models that reliably support function calling (AXIOM requires it).
+// Order = preference. Failover moves down this list on rate limits.
+const TOOL_MODELS = ['llama-3.3-70b-versatile', 'openai/gpt-oss-20b']
+
+// Truncate handoff context so the pipeline stays inside Groq's free-tier
+// token budgets. ~4 chars per token is a safe average for mixed text.
+export const MAX_HANDOFF_CHARS = 8000
+
 export async function discoverModel(groqKey) {
   const res = await fetch(`${GROQ_URL}/models`, {
     headers: { Authorization: `Bearer ${groqKey}` }
@@ -10,19 +18,19 @@ export async function discoverModel(groqKey) {
   if (!res.ok) throw new Error(`Groq models endpoint failed (${res.status})`)
   const data = await res.json()
   const available = (data.data || []).map((m) => m.id)
-  const preferred = [
-    'llama-3.3-70b-versatile',
-    'openai/gpt-oss-120b',
-    'openai/gpt-oss-20b',
-    'llama-3.1-8b-instant'
-  ]
-  const match = preferred.find((m) => available.includes(m))
-  if (match) return match
-  const fallback = available.find((m) => !m.includes('whisper') && !m.includes('guard') && !m.includes('compound') && !m.includes('orpheus'))
-  return fallback || available[0]
+  return TOOL_MODELS.find((m) => available.includes(m)) || available[0]
 }
 
-export async function runAxiom({ groqKey, model, ticker, finnhubKey }) {
+export function truncateContext(text, maxChars = MAX_HANDOFF_CHARS) {
+  if (!text) return text
+  if (text.length <= maxChars) return text
+  return text.slice(0, maxChars) + '\n\n[PREVIOUS OUTPUT TRUNCATED — token budget]'
+}
+
+export async function runAxiom({ groqKey, model, ticker, finnhubKey, signal, maxTokens }) {
+  const agent = AGENTS.find((a) => a.id === 'axiom')
+  const budget = maxTokens || agent.maxTokens
+
   const tools = [
     {
       type: 'function',
@@ -46,13 +54,14 @@ export async function runAxiom({ groqKey, model, ticker, finnhubKey }) {
   const firstCall = await groqChat({
     groqKey,
     model,
+    signal,
     messages: [
-      { role: 'system', content: axiom().systemPrompt },
+      { role: 'system', content: agent.systemPrompt },
       { role: 'user', content: userMessage(ticker) }
     ],
     tools,
     tool_choice: 'required',
-    max_tokens: 500
+    max_tokens: 300
   })
 
   const assistantMsg = firstCall.choices[0].message
@@ -73,18 +82,19 @@ export async function runAxiom({ groqKey, model, ticker, finnhubKey }) {
     /* keep ticker */
   }
 
-  const marketData = await fetchMarketData(requestedTicker, finnhubKey)
+  const marketData = await fetchMarketData(requestedTicker, finnhubKey, signal)
 
   const secondCall = await groqChat({
     groqKey,
     model,
+    signal,
     messages: [
-      { role: 'system', content: axiom().systemPrompt },
+      { role: 'system', content: agent.systemPrompt },
       { role: 'user', content: userMessage(ticker) },
       assistantMsg,
       { role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(marketData) }
     ],
-    max_tokens: 1800
+    max_tokens: budget
   })
 
   return {
@@ -94,35 +104,46 @@ export async function runAxiom({ groqKey, model, ticker, finnhubKey }) {
   }
 }
 
-export async function runAgent({ groqKey, model, systemPrompt, previousOutput }) {
+export async function runAgent({ groqKey, model, systemPrompt, previousOutput, signal, maxTokens }) {
   const res = await groqChat({
     groqKey,
     model,
+    signal,
     messages: [
       { role: 'system', content: systemPrompt },
       {
         role: 'user',
-        content: `The previous agent produced the following output. Use it as the input for your task.\n\n--- PREVIOUS AGENT OUTPUT ---\n${previousOutput}`
+        content: `The previous agent produced the following output. Use it as the input for your task.\n\n--- PREVIOUS AGENT OUTPUT ---\n${truncateContext(previousOutput)}`
       }
     ],
-    max_tokens: 1800
+    max_tokens: maxTokens || 900
   })
   return res.choices[0].message.content
 }
 
-export function axiom() {
-  return AGENTS.find((a) => a.id === 'axiom')
-}
+const sleep = (ms, signal) =>
+  new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms)
+    if (signal) {
+      signal.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer)
+          reject(new DOMException('Aborted', 'AbortError'))
+        },
+        { once: true }
+      )
+    }
+  })
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-
-async function groqChat({ groqKey, model, ...body }) {
-  const maxAttempts = 5
-  const baseDelay = 15000
+async function groqChat({ groqKey, model, signal, ...body }) {
+  const maxAttempts = 4
+  const baseDelay = 12000
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const res = await fetch(`${GROQ_URL}/chat/completions`, {
       method: 'POST',
+      signal,
       headers: {
         Authorization: `Bearer ${groqKey}`,
         'Content-Type': 'application/json'
@@ -137,16 +158,24 @@ async function groqChat({ groqKey, model, ...body }) {
     if (res.ok) return res.json()
 
     const detail = await res.text().catch(() => '')
-    const limited = res.status === 429 || detail.includes('Rate limit reached') || detail.includes('TPM')
+    const limited = res.status === 429 || detail.includes('Rate limit reached') || detail.includes('TPD') || detail.includes('TPM')
 
     if (limited && attempt < maxAttempts) {
       const retryAfter = Number(res.headers.get('retry-after'))
       const pause = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : baseDelay * attempt
-      await sleep(pause)
+      await sleep(pause, signal)
       continue
     }
 
     throw new Error(detail ? `Groq request failed (${res.status}): ${detail.slice(0, 200)}` : `Groq request failed (${res.status})`)
   }
   throw new Error('Groq request failed after multiple retries')
+}
+
+export function isRateLimitError(err) {
+  return /429|rate limit|TPM|TPD/i.test(err?.message || '')
+}
+
+export function isAbortError(err) {
+  return err?.name === 'AbortError'
 }

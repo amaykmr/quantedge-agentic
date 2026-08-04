@@ -197,6 +197,16 @@ input:focus {
   color: #02130b;
 }
 
+.btn.danger {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}
+
 .banner {
   border-radius: 6px;
   padding: 10px 14px;
@@ -439,6 +449,11 @@ input:focus {
   border: 1px solid var(--red);
 }
 
+.status-cancelled {
+  color: var(--muted);
+  border: 1px dashed var(--muted);
+}
+
 .agent-meta {
   display: flex;
   flex-direction: column;
@@ -552,4 +567,121 @@ input:focus {
   .logo {
     font-size: 32px;
   }
+}
+
+/* ---------- Market visuals (Researcher panel) ---------- */
+.market-visuals {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin: 10px 0 12px;
+  background: var(--bg);
+}
+
+.mv-title {
+  color: var(--green);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  margin-bottom: 10px;
+}
+
+.mv-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px 14px;
+  margin-bottom: 14px;
+}
+
+.mv-chip {
+  display: flex;
+  flex-direction: column;
+}
+
+.mv-chip-key {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.mv-chip-val {
+  color: var(--text);
+  font-size: 14px;
+  font-family: var(--font-mono);
+}
+
+.mv-chip-val.pos {
+  color: var(--green);
+}
+
+.mv-chip-val.neg {
+  color: var(--red);
+}
+
+.mv-ranges {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rangebar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.rangebar-label {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.rangebar-price {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.rangebar-track {
+  position: relative;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: visible;
+}
+
+.rangebar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(0, 255, 136, 0.35), rgba(0, 255, 136, 0.9));
+  border-radius: 4px;
+}
+
+.rangebar-marker {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 14px;
+  background: var(--amber);
+  border-radius: 1px;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+}
+
+.rangebar-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+
+.mv-note {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--muted);
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
 }

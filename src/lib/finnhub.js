@@ -1,14 +1,15 @@
 const FINNHUB_BASE = 'https://finnhub.io/api/v1'
 
-export async function fetchMarketData(ticker, finnhubKey) {
-  const quote = await finnhubGet(`/quote?symbol=${encodeURIComponent(ticker)}`, finnhubKey)
-  const profile = await finnhubGet(`/stock/profile2?symbol=${encodeURIComponent(ticker)}`, finnhubKey)
+export async function fetchMarketData(ticker, finnhubKey, signal) {
+  const quote = await finnhubGet(`/quote?symbol=${encodeURIComponent(ticker)}`, finnhubKey, signal)
+  const profile = await finnhubGet(`/stock/profile2?symbol=${encodeURIComponent(ticker)}`, finnhubKey, signal)
 
   let metrics = {}
   try {
     const m = await finnhubGet(
       `/stock/metric?symbol=${encodeURIComponent(ticker)}&metric=all`,
-      finnhubKey
+      finnhubKey,
+      signal
     )
     metrics = m?.metric || {}
   } catch {
@@ -42,8 +43,8 @@ export async function fetchMarketData(ticker, finnhubKey) {
   }
 }
 
-async function finnhubGet(path, finnhubKey) {
-  const res = await fetch(`${FINNHUB_BASE}${path}&token=${finnhubKey}`, { method: 'GET' })
+async function finnhubGet(path, finnhubKey, signal) {
+  const res = await fetch(`${FINNHUB_BASE}${path}&token=${finnhubKey}`, { method: 'GET', signal })
   if (!res.ok) throw new Error(`Finnhub request failed (${res.status}) for ${path}`)
   return res.json()
 }

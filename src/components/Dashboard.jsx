@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { AGENTS } from '../config/agents.js'
 import AgentPanel from './AgentPanel.jsx'
 
-export default function Dashboard({ config, results, running, error, onRun, onReset, onChangeTicker }) {
+export default function Dashboard({ config, results, running, error, onRun, onStop, onReset, onChangeTicker }) {
   const [tickerInput, setTickerInput] = useState(config.ticker)
 
   const submitTicker = (e) => {
@@ -11,7 +11,6 @@ export default function Dashboard({ config, results, running, error, onRun, onRe
   }
 
   const allComplete = results.every((r) => r.status === 'complete')
-  const axiom = results[0]
 
   return (
     <div className="dashboard">
@@ -39,6 +38,11 @@ export default function Dashboard({ config, results, running, error, onRun, onRe
           <button type="button" className="btn primary" onClick={onRun} disabled={running}>
             {running ? 'Pipeline Running…' : 'Run Pipeline'}
           </button>
+          {running && (
+            <button type="button" className="btn danger" onClick={onStop}>
+              ■ End Pipeline
+            </button>
+          )}
           <button type="button" className="btn ghost" onClick={onReset} disabled={running}>
             Reset
           </button>
@@ -47,9 +51,8 @@ export default function Dashboard({ config, results, running, error, onRun, onRe
 
       <div className="sys-line mono">
         MODEL: {config.model} &nbsp;&nbsp;|&nbsp;&nbsp; TICKER: {config.ticker.toUpperCase()}
+        &nbsp;&nbsp;|&nbsp;&nbsp; TOTAL OUTPUT BUDGET: {AGENTS.reduce((s, a) => s + a.maxTokens, 0)} tokens
       </div>
-
-      {axiom?.marketData && <MarketDataStrip data={axiom.marketData} />}
 
       {error && <div className="banner error">[ERR] {error}</div>}
       {allComplete && (
@@ -74,32 +77,6 @@ export default function Dashboard({ config, results, running, error, onRun, onRe
         QUANTEDGE is an educational demonstration. Nothing produced by this pipeline is investment
         advice. All decisions require human oversight.
       </footer>
-    </div>
-  )
-}
-
-function MarketDataStrip({ data }) {
-  const items = [
-    ['LIVE PRICE', data.currentPrice != null ? `$${data.currentPrice.toFixed(2)}` : '—'],
-    ['CHG %', data.dayChangePct != null ? `${data.dayChangePct.toFixed(2)}%` : '—'],
-    ['DAY HIGH', data.dayHigh != null ? `$${data.dayHigh.toFixed(2)}` : '—'],
-    ['DAY LOW', data.dayLow != null ? `$${data.dayLow.toFixed(2)}` : '—'],
-    ['52W HIGH', data.high52Week != null ? `$${data.high52Week.toFixed(2)}` : '—'],
-    ['52W LOW', data.low52Week != null ? `$${data.low52Week.toFixed(2)}` : '—'],
-    ['MKT CAP', data.marketCap != null ? `$${(data.marketCap / 1000).toFixed(1)}B` : '—'],
-    ['SECTOR', data.industry !== 'unavailable' ? data.industry.toUpperCase() : '—']
-  ]
-  return (
-    <div className="market-strip mono">
-      <span className="strip-title">LIVE MARKET DATA — FINNHUB</span>
-      <div className="strip-grid">
-        {items.map(([k, v]) => (
-          <div key={k} className="strip-item">
-            <span className="strip-key">{k}</span>
-            <span className="strip-val">{v}</span>
-          </div>
-        ))}
-      </div>
     </div>
   )
 }

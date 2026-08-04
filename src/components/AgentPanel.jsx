@@ -1,15 +1,16 @@
-import { useState } from 'react'
+import MarketVisuals from './MarketVisuals.jsx'
 
 const STATUS_LABEL = {
   waiting: 'WAITING',
   running: 'RUNNING',
   complete: 'COMPLETE',
-  error: 'ERROR'
+  error: 'ERROR',
+  cancelled: 'CANCELLED'
 }
 
 export default function AgentPanel({ agent, result }) {
-  const [showPrompt, setShowPrompt] = useState(false)
   const status = result?.status || 'waiting'
+  const showVisuals = agent.id === 'axiom' && result?.marketData && status !== 'cancelled'
 
   return (
     <section className="agent-panel" data-status={status}>
@@ -30,18 +31,21 @@ export default function AgentPanel({ agent, result }) {
         <span>
           <span className="meta-key">OUTPUT</span> {agent.output}
         </span>
+        <span>
+          <span className="meta-key">TOKEN BUDGET</span> max {agent.maxTokens} output tokens
+        </span>
       </div>
 
-      <button type="button" className="prompt-toggle" onClick={() => setShowPrompt((v) => !v)}>
-        [{showPrompt ? '▼' : '▶'}] View System Prompt
-      </button>
-      {showPrompt && <pre className="system-prompt">{agent.systemPrompt}</pre>}
+      {showVisuals && <MarketVisuals data={result.marketData} />}
 
       <div className="agent-output">
         {status === 'complete' && result?.text && <pre className="output">{result.text}</pre>}
         {status === 'waiting' && <p className="placeholder">Awaiting handoff…</p>}
         {status === 'running' && <p className="placeholder typing">Analysing…</p>}
         {status === 'error' && <p className="placeholder error-text">{result?.error}</p>}
+        {status === 'cancelled' && (
+          <p className="placeholder">Stopped by operator — pipeline ended.</p>
+        )}
       </div>
     </section>
   )
